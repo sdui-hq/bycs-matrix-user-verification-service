@@ -1,0 +1,43 @@
+name: Docker
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          image="${image,,}"
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            tags=("-t" "${image}:${{ github.ref_name }}")
+          else
+            timestamp=$(date +"%s")
+            tags=("-t" "${image}:${{ github.ref_name }}-${timestamp}" "-t" "${image}:${{ github.ref_name }}")
+            if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]; then
+              tags+=("-t" "${image}:latest")
+            fi
+          fi
+          docker build --pull "${tags[@]}" .
+          docker push --all-tags "${image}"
